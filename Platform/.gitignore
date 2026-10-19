@@ -1,0 +1,4 @@
+**/bin/
+**/obj/
+MacOS/Native/.build/
+*.pxf
