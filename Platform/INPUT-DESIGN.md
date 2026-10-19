@@ -4,7 +4,13 @@ The user requires input to originate through a device input path. The existing
 CGEvent implementation is diagnostic software injection and does not satisfy this
 requirement. No gameplay or undetectability claim follows from its tests.
 
-## Hardware direction accepted; board selection pending
+## Hardware direction accepted; Pico purchased
+
+On October 19, the user purchased a Pico and case; hardware work is paused until
+delivery. The identified existing Pi 3 B+ cannot serve as the USB HID gadget through
+its external ports. Its 256 GB SanDisk card was not erased and is not needed.
+Confirm the delivered Pico model before selecting/flashing firmware. See
+PROJECT-STATUS.md for purchase links, handoff, and remaining proof gates.
 
 The preferred candidate is a physical USB HID keyboard/mouse controller driven by
 the local Mac runtime. The user has confirmed that an external device is acceptable.

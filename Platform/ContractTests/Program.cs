@@ -76,6 +76,29 @@ BinaryPrimitives.WriteSingleLittleEndian(malformed.AsSpan(20), float.NaN);
 await Reject(malformed, "invalid scale rejected");
 await Reject(valid[..^1], "truncated payload rejected");
 
+void RejectHeartbeat(Action action, string name)
+{
+    try { action(); }
+    catch (Exception error) when (error is InvalidDataException or ArgumentException)
+    { Check(true, name); return; }
+    throw new Exception($"FAIL: {name}");
+}
+PixelHeartbeat changing = new(TimeSpan.FromSeconds(2));
+changing.Observe(0xfffffe, TimeSpan.Zero);
+changing.Observe(0xffffff, TimeSpan.FromMilliseconds(100));
+changing.Observe(0, TimeSpan.FromMilliseconds(200));
+changing.RequireProgress();
+Check(changing.Advances == 2, "rendered heartbeat accepts forward progress across 24-bit wrap");
+changing.Observe(0, TimeSpan.FromMilliseconds(300));
+Check(changing.Advances == 2, "duplicate source frame does not count as heartbeat progress");
+RejectHeartbeat(() => changing.Observe(0xffffff, TimeSpan.FromMilliseconds(400)), "backward/replayed heartbeat rejected");
+PixelHeartbeat frozen = new(TimeSpan.FromSeconds(2));
+frozen.Observe(123, TimeSpan.Zero);
+RejectHeartbeat(() => frozen.Observe(123, TimeSpan.FromSeconds(3)), "frozen pixels rejected regardless of helper timestamp");
+RejectHeartbeat(() => frozen.Observe(124, TimeSpan.FromSeconds(3)), "late source change cannot hide excessive observation gap");
+RejectHeartbeat(() => new PixelHeartbeat(TimeSpan.FromSeconds(2)).RequireProgress(), "short run cannot claim source progress");
+RejectHeartbeat(() => changing.Observe(1, TimeSpan.FromMilliseconds(1)), "nonmonotonic observation clock rejected");
+
 if (args.Length == 2 && args[0] == "--native")
 {
     string helper = Path.GetFullPath(args[1]);

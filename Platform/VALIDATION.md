@@ -110,3 +110,22 @@ design decision, not a completed hardware implementation or a detection guarante
 The dummy login text was subsequently cleared and the empty field visually verified.
 The optional Xbox-style gamepad backend is recorded as a requirement/design only.
 No controller hardware or virtual gamepad implementation has been validated.
+
+### Rendered heartbeat verifier (October 19)
+
+Added PixelProof animation in data cell 17, retaining static calibration and the
+separate Space counter. The verifier optionally checks this source counter with a
+two-second local stall bound, half-range 24-bit ordering, and at least two advances.
+It checks all other cells against independent expected values. Helper timestamps
+remain independently checked but are not used as source freshness evidence.
+
+24 contract/native checks pass, including frozen/replayed heartbeat rejection,
+counter wrap, long observation gaps, and insufficient progress. The exhaustive
+16,777,216-color native fixture still has zero mismatches. Verify builds with zero
+warnings/errors. Four synthetic end-to-end CLI checks pass: changing pixels pass,
+frozen pixels with advancing helper timestamps fail, corrupt static colors fail,
+and insufficient heartbeat advances fail. Run `python3 ContractTests/heartbeat-smoke.py`
+after building Verify to reproduce those CLI checks.
+
+The new Lua mode is source-only and has not been installed/reloaded or validated
+in-world. This milestone does not establish live source freshness.

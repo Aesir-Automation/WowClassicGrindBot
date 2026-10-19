@@ -29,3 +29,23 @@ behavior, since a fixture counter alone does not establish gameplay automation.
 
 Use `/pixelproof hide` when finished. This fixture is intentionally independent of
 DataToColor, so a pass does not validate that addon's version-specific game APIs.
+
+## Source freshness check
+
+First calibrate in static mode (`/pixelproof reset`). Then run `/pixelproof animate`.
+Cell index 17 (zero-based) becomes a 24-bit heartbeat updated about every 100 ms;
+the separate Space counter remains at index 18. Do not press Space during this check.
+
+```sh
+dotnet run --project MacOS/Verify/Verify.csproj -- \
+  /absolute/path/to/endpoint.json WINDOW_ID /absolute/path/to/layout.json \
+  GameFixture/expected-values.json 30 --heartbeat-index 17
+```
+
+The verifier checks every other cell against its independent static value, requires
+at least two heartbeat advances, rejects backward/reset values, and fails if local
+observation time exceeds two seconds without an advance (including capture gaps).
+Counter wrap is supported. This proves observed changing source pixels within that
+bound, not absolute frame age or acceptable combat latency. A capture timeout also
+fails. Use `/pixelproof reset` to stop animation and restore the calibration palette.
+The updated addon must be installed and reloaded before using this mode.

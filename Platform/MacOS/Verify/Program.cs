@@ -7,12 +7,16 @@ using WowBot.Platform;
 // known, static in-game pattern, never from the captures being tested.
 try
 {
-    if (args.Length is not (4 or 5))
+    if (args.Length is not (4 or 5 or 7))
     {
-        throw new ArgumentException("Usage: Verify <helper> <window-id> <layout.json> <expected-values.json> [sample-count=30]");
+        throw new ArgumentException("Usage: Verify <helper-or-endpoint.json> <window-id> <layout.json> <expected-values.json> [sample-count=30] [--heartbeat-index <index>]");
     }
     uint windowId = uint.Parse(args[1], CultureInfo.InvariantCulture);
-    int count = args.Length == 5 ? int.Parse(args[4], CultureInfo.InvariantCulture) : 30;
+    int count = args.Length >= 5 ? int.Parse(args[4], CultureInfo.InvariantCulture) : 30;
+    int? heartbeatIndex = args.Length == 7 && args[5] == "--heartbeat-index"
+        ? int.Parse(args[6], CultureInfo.InvariantCulture) : null;
+    if (args.Length == 7 && heartbeatIndex is null)
+        throw new ArgumentException("Expected --heartbeat-index.");
     if (windowId == 0 || count is < 2 or > 1000)
     {
         throw new ArgumentException("Window ID must be positive; sample count must be 2..1000.");
@@ -29,6 +33,10 @@ try
     {
         throw new InvalidDataException("Expected values must match the layout, include both sentinels and at least one data cell, and be 24-bit integers.");
     }
+    if (heartbeatIndex is int h && (h <= 0 || h >= cells.Length - 1))
+        throw new ArgumentException("Heartbeat index must be an interior data cell.");
+    PixelHeartbeat? heartbeat = heartbeatIndex.HasValue ? new(TimeSpan.FromSeconds(2)) : null;
+    long sessionStarted = Stopwatch.GetTimestamp();
     IWindowCapture bridge = args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? new MacAppBridgeClient(args[0]) : new MacBridgeClient(args[0]);
     using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(Math.Min(1800, count * 15)));
@@ -49,23 +57,32 @@ try
         {
             throw new InvalidDataException($"Sample {sample}: invalid addon sentinels or layout.");
         }
-        if (!actual.SequenceEqual(expected))
+        int index = Enumerable.Range(0, actual.Length)
+            .FirstOrDefault(i => i != heartbeatIndex && actual[i] != expected[i], -1);
+        if (index >= 0)
         {
-            int index = Enumerable.Range(0, actual.Length).First(i => actual[i] != expected[i]);
             throw new InvalidDataException($"Sample {sample}, cell {index}: expected {expected[index]}, received {actual[index]}.");
         }
+        if (heartbeatIndex is int heartbeatCell)
+            heartbeat!.Observe(actual[heartbeatCell], Stopwatch.GetElapsedTime(sessionStarted));
         previous = frame;
+        if (heartbeat is not null && sample + 1 < count)
+            await Task.Delay(100, timeout.Token);
     }
+    heartbeat?.RequireProgress();
     durations.Sort();
     Console.WriteLine(JsonSerializer.Serialize(new
     {
-        Status = "passed", Scope = "selected-window-static-pixel-roundtrip",
+        Status = "passed", Scope = heartbeat is null ? "selected-window-static-pixel-roundtrip" : "selected-window-pixel-heartbeat",
+        HeartbeatAdvances = heartbeat?.Advances,
         WindowId = windowId, Samples = count, Cells = cells.Length,
         previous!.Width, previous.Height, previous.PointPixelScale,
         MedianSnapshotMilliseconds = durations[count / 2],
         P95SnapshotMilliseconds = durations[(int)Math.Ceiling(count * 0.95) - 1],
         ProvesGameInput = false, ProvesCombatTiming = false,
-        Caveat = "Caller must verify this is the game window and supply independently known static values. Timestamps measure helper conversion, not source-frame freshness."
+        Caveat = heartbeat is null
+            ? "Caller must verify game window and independent static values. Helper timestamps do not prove source freshness."
+            : "Observed changing addon pixels within a two-second bound; does not establish absolute frame age, game input, or combat timing."
     }));
     return 0;
 }
