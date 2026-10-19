@@ -4,10 +4,10 @@ The user requires input to originate through a device input path. The existing
 CGEvent implementation is diagnostic software injection and does not satisfy this
 requirement. No gameplay or undetectability claim follows from its tests.
 
-## Proposed direction, pending hardware availability
+## Hardware direction accepted; board selection pending
 
 The preferred candidate is a physical USB HID keyboard/mouse controller driven by
-the local Mac runtime. Whether external hardware is acceptable remains to be confirmed.
+the local Mac runtime. The user has confirmed that an external device is acceptable.
 The controller presents its own honest device identity and standard HID reports.
 The runtime sends commands over a separate control interface (for example USB CDC),
 while macOS receives keyboard/mouse reports through its ordinary device path.
@@ -84,3 +84,25 @@ Additional references:
 - https://support.apple.com/en-us/111101
 - https://developer.apple.com/documentation/gamecontroller/discovering-game-controllers
 - https://learn.microsoft.com/en-us/windows/win32/xinput/
+
+## Initial hardware recommendation
+
+Start with an original Raspberry Pi Pico (RP2040) and a USB data cable. TinyUSB lists
+this board and provides a composite HID keyboard/mouse/gamepad example. The board
+has USB device support and USB drag-and-drop programming. This is a starting-board
+recommendation, not a claim that its stock firmware implements our command channel.
+If an appropriate programmable board is already available, identify its exact model
+before buying another or committing to its firmware target.
+
+The intended prototype combines a local control interface with keyboard/mouse HID
+and an optional gamepad profile. No soldering is expected for the initial USB-only
+prototype. A normal retail Xbox controller can help establish baseline game mappings,
+but merely connecting it does not supply a programmable device-output bridge.
+
+The first hardware milestone is enumeration, a press/release, and verified watchdog
+neutralization. Exact Xbox-compatible recognition remains a separate proof gate.
+
+Board references:
+- https://www.raspberrypi.com/products/raspberry-pi-pico/
+- https://docs.tinyusb.org/en/latest/reference/boards.html
+- https://docs.tinyusb.org/en/latest/examples/device/hid_composite.html
