@@ -92,6 +92,34 @@ if (args.Length == 2 && args[0] == "--native")
         "Swift CoreGraphics to .NET preserves pixel channels, orientation, and scale");
     Check(AddonPixelDecoder.TryDecode(native, cells, new int[3]), "native pixels satisfy upstream addon sentinels");
 
+    using Process colors = Process.Start(new ProcessStartInfo(helper)
+    {
+        ArgumentList = { "color-fixture" }, RedirectStandardOutput = true,
+        RedirectStandardError = true, UseShellExecute = false
+    }) ?? throw new Exception("Color fixture failed to start.");
+    Task<string> colorErrors = colors.StandardError.ReadToEndAsync();
+    using CancellationTokenSource colorTimeout = new(TimeSpan.FromSeconds(30));
+    using CancellationTokenRegistration colorCancel = colorTimeout.Token.Register(() =>
+    {
+        if (!colors.HasExited) colors.Kill(entireProcessTree: true);
+    });
+    PixelFrame exhaustive = await FrameProtocol.ReadAsync(colors.StandardOutput.BaseStream, colorTimeout.Token);
+    await colors.WaitForExitAsync(colorTimeout.Token);
+    Check(colors.ExitCode == 0 && exhaustive.Width == 4096 && exhaustive.Height == 4096,
+        $"exhaustive native fixture has all 16,777,216 colors: {await colorErrors}");
+    int mismatches = 0;
+    for (int y = 0; y < exhaustive.Height; y++)
+    {
+        for (int x = 0; x < exhaustive.Width; x++)
+        {
+            if (exhaustive.GetRgb(x, y) != y * 4096 + x || exhaustive.GetAlpha(x, y) != 255)
+            {
+                mismatches++;
+            }
+        }
+    }
+    Check(mismatches == 0, $"all 24-bit values survive native conversion and .NET decoding; mismatches={mismatches}");
+
     using Process dryRun = Process.Start(new ProcessStartInfo(helper)
     {
         ArgumentList = { "key", "--pid", "2147483647", "--key-code", "0", "--milliseconds", "1" },

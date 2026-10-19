@@ -19,7 +19,10 @@ dependencies to the Windows solution and does not change upstream runtime behavi
 - `MacOS/Probe`: .NET CLI that captures one selected window and optionally decodes
   an existing `frame_config.json` layout.
 - `ContractTests`: dependency-free checks for framing, partial reads, pixel order,
-  row padding, malformed input, layout validation, native conversion, and input dry-run.
+  row padding, malformed input, layout validation, native conversion of every
+  possible 24-bit RGB value, and input dry-run.
+- `MacOS/Verify`: repeated read-only capture acceptance against independently
+  known static pixel values, with machine-readable pass/fail and snapshot timings.
 
 The .NET projects explicitly target `net10.0`. `Platform/global.json` permits newer
 .NET 10 feature bands while leaving the upstream SDK policy untouched.
@@ -72,6 +75,31 @@ cells. The probe translates full-window layout coordinates into crop coordinates
 Windows-generated layouts may not match Mac title bars, scaling, or resolution;
 calibration is still manual. A sentinel mismatch is a failure, not a new state update.
 Metadata/config-mode pixel detection is not implemented in this milestone.
+
+## Repeated pixel acceptance
+
+Display an independently known, static addon test pattern in the game, calibrate
+its cell coordinates, and create `expected-values.json` with a JSON integer array
+in cell-index order (including first/last sentinels). Do not generate the expected
+values from captured pixels: that would make this test circular. A normal changing
+DataToColor state stream is unsuitable for this static-pattern test.
+
+```sh
+dotnet run --project MacOS/Verify/Verify.csproj -- \
+  MacOS/Native/.build/wow-mac-bridge 12345 \
+  /absolute/path/to/frame_config.json /absolute/path/to/expected-values.json 30
+```
+
+The verifier captures the selected window repeatedly, checks every cell exactly,
+requires stable dimensions/scale and increasing helper timestamps, and emits JSON
+with exit code 0 on pass or 1 on failure. Samples are bounded to 2..1000. This is a
+read-only test: no keys are posted. Timing includes process startup and a full-window
+snapshot; it is not streaming throughput. Helper timestamps reflect conversion time,
+so increasing timestamps cannot prove that the game supplied fresh frames. The caller
+must verify the selected window identity. A pass establishes only static pixel
+round-tripping, not game input, rotation correctness, or combat latency.
+
+See [VALIDATION.md](VALIDATION.md) for observed results and the remaining proof gates.
 
 ## Input probe
 

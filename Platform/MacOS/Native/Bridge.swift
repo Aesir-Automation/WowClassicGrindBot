@@ -86,6 +86,9 @@ struct MacBridge {
             case "fixture":
                 try args.validate(allowed: [])
                 try fixture()
+            case "color-fixture":
+                try args.validate(allowed: [])
+                try colorFixture()
             case "key":
                 try args.validate(allowed: ["--pid", "--key-code", "--milliseconds"], allowExecute: true)
                 try pressKey(args)
@@ -171,6 +174,30 @@ struct MacBridge {
             throw BridgeFailure("Could not create fixture.")
         }
         try emitFrame(image, scale: 2)
+    }
+
+    // Every possible opaque 24-bit addon value. This is synthetic, not screen capture.
+    static func colorFixture() throws {
+        let dimension = 4096
+        var bytes = Data(count: dimension * dimension * 4)
+        bytes.withUnsafeMutableBytes { (buffer: UnsafeMutableRawBufferPointer) in
+            for value in 0..<(dimension * dimension) {
+                let offset = value * 4
+                buffer[offset] = UInt8(truncatingIfNeeded: value)
+                buffer[offset + 1] = UInt8(truncatingIfNeeded: value >> 8)
+                buffer[offset + 2] = UInt8(truncatingIfNeeded: value >> 16)
+                buffer[offset + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: bytes as CFData),
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let image = CGImage(width: dimension, height: dimension, bitsPerComponent: 8,
+                bitsPerPixel: 32, bytesPerRow: dimension * 4, space: space,
+                bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
+            throw BridgeFailure("Could not create exhaustive color fixture.")
+        }
+        try emitFrame(image, scale: 1)
     }
 
     static func emitFrame(_ image: CGImage, scale: Float) throws {
