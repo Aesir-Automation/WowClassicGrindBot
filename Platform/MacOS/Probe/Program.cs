@@ -6,7 +6,7 @@ try
 {
     if (args.Length < 2)
     {
-        Console.Error.WriteLine("Usage: Probe <native-helper-path> <window-id> [x y width height] [--layout frame_config.json]");
+        Console.Error.WriteLine("Usage: Probe <native-helper-path> <window-id> [x y width height] [--layout frame_config.json]; or Probe --file capture.pxf [--layout frame_config.json]");
         return 2;
     }
     string? layoutPath = null;
@@ -28,9 +28,21 @@ try
         ? new PixelRegion(int.Parse(args[2], CultureInfo.InvariantCulture), int.Parse(args[3], CultureInfo.InvariantCulture),
             int.Parse(args[4], CultureInfo.InvariantCulture), int.Parse(args[5], CultureInfo.InvariantCulture))
         : null;
-    MacBridgeClient bridge = new(args[0]);
     using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(15));
-    PixelFrame frame = await bridge.CaptureAsync(new CaptureRequest(uint.Parse(args[1], CultureInfo.InvariantCulture), region), timeout.Token);
+    PixelFrame frame;
+    if (args[0] == "--file")
+    {
+        if (region is not null) throw new ArgumentException("--file uses the complete saved frame; omit region arguments.");
+        await using FileStream input = File.OpenRead(args[1]);
+        frame = await FrameProtocol.ReadAsync(input, timeout.Token);
+        if (input.Position != input.Length) throw new InvalidDataException("Unexpected bytes after saved frame.");
+    }
+    else
+    {
+        IWindowCapture bridge = args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? new MacAppBridgeClient(args[0]) : new MacBridgeClient(args[0]);
+        frame = await bridge.CaptureAsync(new CaptureRequest(uint.Parse(args[1], CultureInfo.InvariantCulture), region), timeout.Token);
+    }
     object? decoded = null;
     if (layoutPath is not null)
     {

@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: PixelProof
+## Notes: Local pixel transport fixture; static palette and Space counter. No gameplay automation.
+## Version: 0.1.0
+PixelProof.lua

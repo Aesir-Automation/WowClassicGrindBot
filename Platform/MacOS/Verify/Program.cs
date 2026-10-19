@@ -29,7 +29,8 @@ try
     {
         throw new InvalidDataException("Expected values must match the layout, include both sentinels and at least one data cell, and be 24-bit integers.");
     }
-    MacBridgeClient bridge = new(args[0]);
+    IWindowCapture bridge = args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            ? new MacAppBridgeClient(args[0]) : new MacBridgeClient(args[0]);
     using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(Math.Min(1800, count * 15)));
     List<double> durations = [];
     PixelFrame? previous = null;

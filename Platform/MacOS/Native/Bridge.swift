@@ -51,6 +51,10 @@ struct MacBridge {
     @MainActor
     static func main() async {
         do {
+            if CommandLine.arguments.count == 1 {
+                PermissionWindow.run()
+                return
+            }
             let args = try Arguments(Array(CommandLine.arguments.dropFirst()))
             switch args.command {
             case "doctor":
@@ -114,7 +118,13 @@ struct MacBridge {
         return try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
 
-    static func capture(_ args: Arguments) async throws {
+    static func capture(_ args: Arguments, destination: URL? = nil) async throws {
+        let bytes = try await captureData(args)
+        if let destination { try bytes.write(to: destination, options: .atomic) }
+        else { FileHandle.standardOutput.write(bytes) }
+    }
+
+    static func captureData(_ args: Arguments) async throws -> Data {
         let id = try args.integer("--window-id")
         guard id > 0, id <= Int(UInt32.max) else { throw BridgeFailure("Invalid window ID.") }
         let content = try await shareableContent()
@@ -156,7 +166,7 @@ struct MacBridge {
             image = full
         }
 
-        try emitFrame(image, scale: scale)
+        return try encodeFrame(image, scale: scale)
     }
 
     // Runs the real BGRA conversion/framing path without screen or input access.
@@ -201,6 +211,10 @@ struct MacBridge {
     }
 
     static func emitFrame(_ image: CGImage, scale: Float) throws {
+        FileHandle.standardOutput.write(try encodeFrame(image, scale: scale))
+    }
+
+    static func encodeFrame(_ image: CGImage, scale: Float) throws -> Data {
         let stride = image.width * 4
         var pixels = Data(count: stride * image.height)
         let converted = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -224,8 +238,8 @@ struct MacBridge {
         append(UInt32(pixels.count), to: &header)
         append(scale.bitPattern, to: &header)
         append(DispatchTime.now().uptimeNanoseconds, to: &header)
-        FileHandle.standardOutput.write(header)
-        FileHandle.standardOutput.write(pixels)
+        header.append(pixels)
+        return header
     }
 
     static func append<T: FixedWidthInteger>(_ value: T, to data: inout Data) {

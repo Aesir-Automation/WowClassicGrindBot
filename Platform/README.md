@@ -7,7 +7,7 @@ Baseline: upstream `Xian55/WowClassicGrindBot` `dev` at
 `c5bc4fb614b2054f10b1b377581d39fcb205c2fa`.
 The fork's existing `dev` branch is deliberately not moved.
 
-This first milestone is a standalone macOS capture/input probe. It is **not yet
+This milestone is a standalone macOS capture/input probe and native app. It is **not yet
 wired into Core, BlazorServer, the combat goals, or an MCP server**. It adds no
 dependencies to the Windows solution and does not change upstream runtime behavior.
 
@@ -15,12 +15,14 @@ dependencies to the Windows solution and does not change upstream runtime behavi
 
 - `Runtime`: OS-neutral capture/input contracts, bounded BGRA frame protocol,
   and DataToColor normal-mode decoding with exact sentinel validation.
-- `MacOS/Native`: Swift helper using ScreenCaptureKit and Core Graphics.
+- `MacOS/Native`: Swift helper and app using ScreenCaptureKit and Core Graphics,
+  with owner-only Unix-domain IPC for clients of the authorized app.
 - `MacOS/Probe`: .NET CLI that captures one selected window and optionally decodes
   an existing `frame_config.json` layout.
 - `ContractTests`: dependency-free checks for framing, partial reads, pixel order,
   row padding, malformed input, layout validation, native conversion of every
   possible 24-bit RGB value, and input dry-run.
+- `GameFixture`: independent WoW color palette/Space-counter addon and exact calibration tool.
 - `MacOS/Verify`: repeated read-only capture acceptance against independently
   known static pixel values, with machine-readable pass/fail and snapshot timings.
 
@@ -43,6 +45,48 @@ MacOS/Native/.build/wow-mac-bridge doctor
 The test suite's native fixture uses generated pixels and does not read the screen,
 request permissions, or send keyboard input. Tests without `--native` run on any
 .NET 10 platform.
+
+## Native app and process permissions
+
+The build produces `MacOS/Native/.build/WowMacBridge.app` and a compatible CLI
+symlink at `.build/wow-mac-bridge`. Open the app in Finder. Its window provides
+explicit permission requests, window selection, saved-frame capture, and a single
+foreground-only Space press after a five-second focus delay. Capture files remain
+local in `.build/live-evidence`. Do not select unrelated/private windows.
+
+**Observed on the development Mac:** the launched app could capture Battle.net
+with Screen Recording authorized, while a CLI subprocess launched by the coding
+workspace still reported no access. A parent's authorization is not portable across
+launch contexts. Treat the app process as the permission owner.
+
+The app publishes `.build/live-evidence/endpoint.json` describing a Unix socket in
+a random private directory (mode 0700, socket mode 0600). `MacAppBridgeClient`
+implements the same runtime contracts by asking that app to perform operations.
+No TCP port is opened. Requests are newline-terminated JSON argument arrays, capped
+at 4096 bytes. The server serializes requests; replies start with a JSON status line,
+followed by PXF1 bytes for capture. There are no automatic input retries.
+
+Probe and Verify accept the endpoint JSON path in place of the helper executable:
+
+```sh
+dotnet run --project MacOS/Probe/Probe.csproj -- \
+  MacOS/Native/.build/live-evidence/endpoint.json 12345
+
+# Read a frame already captured through the GUI, without socket access:
+dotnet run --project MacOS/Probe/Probe.csproj -- \
+  --file /absolute/path/to/capture.pxf --layout /absolute/path/to/frame_config.json
+```
+
+The IPC client/server compile, but live IPC remains unverified: this coding execution
+environment rejected the Unix socket test with `Operation not permitted`. The GUI
+capture and saved-file .NET path were tested successfully against Battle.net and the
+native WoW 1.60.1 game window. Do not interpret those
+as proof that the socket integration works yet.
+
+Development builds use ad-hoc signing. Rebuilding changes the code identity and may
+invalidate existing TCC grants even when Settings still shows a switch enabled.
+Re-authorize the rebuilt app through macOS when needed. Distribution needs a stable
+signing identity; this build does not manufacture or weaken a designated requirement.
 
 ## Live capture validation
 
@@ -100,6 +144,15 @@ must verify the selected window identity. A pass establishes only static pixel
 round-tripping, not game input, rotation correctness, or combat latency.
 
 See [VALIDATION.md](VALIDATION.md) for observed results and the remaining proof gates.
+
+## Device-origin input target
+
+The production requirement is device-origin input. Physical USB HID is the preferred
+candidate, pending hardware availability, with keyboard/mouse and an optional
+Xbox-style gamepad backend.
+The CGEvent bridge below is a diagnostic backend and does not meet that requirement.
+See [INPUT-DESIGN.md](INPUT-DESIGN.md) for the device boundary, required contract
+changes and proof gates. No physical HID adapter has been implemented yet.
 
 ## Input probe
 
